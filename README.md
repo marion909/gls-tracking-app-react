@@ -1,6 +1,27 @@
 # GLS Tracking App - React Edition
 
-Eine moderne, sichere Web-Anwendung zur automatisierten Verfolgung von GLS-Sendungen mit Real-time Updates und verschlüsselter Datenspeicherung.
+**Version 1.1.0** - Eine moderne, sichere Web-Anwendung zur automatisierten Verfolgung von GLS-Sendungen mit Real-time Updates, Kundensortierung und verschlüsselter Datenspeicherung.
+
+## ✨ Neue Features in Version 1.1.0
+
+### 🎯 Kundensortierung & Gruppierung
+- **Alphabetische Sortierung**: Alle Sendungen nach Kundennamen sortiert
+- **Intelligente Gruppierung**: Mehrere Pakete pro Kunde werden untereinander angezeigt
+- **Smart Nummerierung**: Anzeige wie "Kunde (1/3)", "Kunde (2/3)" für bessere Übersicht
+
+### 📍 Adressverwaltung
+- **Neue Adress-Spalte**: "Adressen" ersetzt "Standort" für klarere Darstellung
+- **Verbesserte Datenextraktion**: Robuste Selenium-Selektoren für zuverlässige Adressdaten
+- **Nahtlose Migration**: Automatische Datenbankaktualisierung ohne Datenverlust
+
+### 🔴 Visuelle Verbesserungen
+- **Überfällig-Markierung**: Pakete älter als 5 Tage werden rot hervorgehoben
+- **Erweiterte Filter**: "Zugestellte", "Stornierte" und "Überfällige" ausblenden
+- **Verbesserte Status-Anzeige**: Farbkodierte Status-Chips
+
+### 🔒 Sicherheit & Benutzerfreundlichkeit
+- **Inaktivitäts-Timeout**: Automatische Abmeldung nach 5 Minuten
+- **Session-Timer**: Visueller Countdown für Benutzer-Awareness
 
 ## 🚀 Ersteinrichtung
 
