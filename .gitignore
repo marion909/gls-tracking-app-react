@@ -1,1 +1,5 @@
 node_modules
+
+# Database files
+*.db
+gls_tracking.db
