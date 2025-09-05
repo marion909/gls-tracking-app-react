@@ -1,0 +1,992 @@
+#GITHUB REPO:
+https://github.com/marion909/gls-tracking-app-react
+
+# GLS Tracking App - React Implementation Guide
+
+## Projektübersicht
+Eine sichere, passwort-geschützte React-Webanwendung zur Verfolgung von GLS-Sendungen mit automatischer Portal-Authentifizierung.
+
+## Technischer Stack
+
+### Frontend
+- **React 18+** mit TypeScript
+- **Vite** als Build-Tool
+- **Tailwind CSS** für Styling
+- **React Router** für Navigation
+- **Zustand** oder **Redux Toolkit** für State Management
+- **React Hook Form** für Formulare
+- **React Query/TanStack Query** für Server State
+- **Framer Motion** für Animationen (optional)
+
+### Backend (Node.js/Express)
+- **Node.js 18+** mit TypeScript
+- **Express.js** als Web Framework
+- **Selenium WebDriver** für Browser-Automation
+- **SQLite** mit **Prisma ORM** für lokale Datenbank
+- **bcrypt** für Password Hashing
+- **crypto** (Node.js built-in) für AES-256 Verschlüsselung
+- **jsonwebtoken** für Session Management
+- **helmet** für Security Headers
+- **cors** für Cross-Origin Requests
+
+### Development Tools
+- **ESLint** + **Prettier** für Code Quality
+- **Husky** für Git Hooks
+- **Jest** + **React Testing Library** für Tests
+- **Playwright** für E2E Tests
+
+## Sicherheitsarchitektur
+
+### Authentifizierung & Verschlüsselung
+1. **Master Password System**
+   - PBKDF2 mit 10.000 Iterationen (SHA-256)
+   - Salt-basierte Passwort-Hashes
+   - Session-basierte Authentifizierung
+
+2. **Daten-Verschlüsselung**
+   - AES-256-CBC für sensitive Daten
+   - Unique Initialization Vectors pro Verschlüsselung
+   - Encrypted Storage für GLS-Credentials
+   - Keine lesbaren Passwörter in der Datenbank
+
+3. **Session Management**
+   - JWT Tokens mit kurzer Lebensdauer
+   - Refresh Token Rotation
+   - Secure HTTP-Only Cookies
+   - CSRF Protection
+
+## Datenbankschema (Prisma)
+
+```prisma
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./gls_tracking.db"
+}
+
+model AppConfig {
+  id                  Int      @id @default(autoincrement())
+  masterPasswordHash  String   // PBKDF2 Hash
+  masterPasswordSalt  String   // Random Salt
+  glsUsernameEnc     String?  // AES-256 encrypted
+  glsPasswordEnc     String?  // AES-256 encrypted
+  encryptionSalt     String?  // For AES encryption
+  isFirstRun         Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model TrackingInfo {
+  id             Int      @id @default(autoincrement())
+  trackingNumber String   @unique
+  customerName   String
+  status         String
+  location       String?
+  lastUpdate     DateTime?
+  isOverdue      Boolean  @default(false)
+  trackingEvents TrackingEvent[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TrackingEvent {
+  id           Int         @id @default(autoincrement())
+  trackingInfo TrackingInfo @relation(fields: [trackingId], references: [id], onDelete: Cascade)
+  trackingId   Int
+  date         String
+  time         String
+  description  String
+  location     String
+  createdAt    DateTime    @default(now())
+}
+```
+
+## GLS Portal Selenium Automation
+
+### Login Selectors & Flow
+```typescript
+// Backend: services/glsAuthService.ts
+
+interface GlsSelectors {
+  // Login Page
+  usernameField: '#ctl00_ctl00_ContentMain_ContentMain_txtUserName'
+  passwordField: '#ctl00_ctl00_ContentMain_ContentMain_txtPassword'
+  loginButton: '#ctl00_ctl00_ContentMain_ContentMain_btnLogin'
+  
+  // Main Portal
+  trackingMenu: 'a[href*="Tracking"]'
+  trackingInput: '#txtTrackingNumber'
+  searchButton: '#btnSearch'
+  
+  // Results
+  trackingTable: '.tracking-results-table'
+  statusCell: 'td.status-column'
+  locationCell: 'td.location-column'
+  dateCell: 'td.date-column'
+  detailsLink: 'a.details-link'
+  
+  // Tracking Details
+  eventsTable: '.tracking-events-table'
+  eventRow: 'tr.event-row'
+  eventDate: '.event-date'
+  eventTime: '.event-time'
+  eventDescription: '.event-description'
+  eventLocation: '.event-location'
+}
+
+class GlsAuthService {
+  private driver: WebDriver
+  private headless: boolean = true
+  
+  async login(username: string, password: string): Promise<boolean> {
+    try {
+      // Setup Chrome with ZScaler/VPN compatibility
+      const options = new ChromeOptions()
+      options.addArguments([
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--ignore-ssl-errors=yes',
+        '--ignore-certificate-errors',
+        '--allow-running-insecure-content',
+        '--disable-web-security',
+        '--proxy-auto-detect', // ZScaler compatibility
+        this.headless ? '--headless' : ''
+      ])
+      
+      this.driver = await new Builder()
+        .forBrowser('chrome')
+        .setChromeOptions(options)
+        .build()
+      
+      // Navigate to GLS Portal
+      await this.driver.get('https://gls-group.eu/AT/de/login')
+      
+      // Wait for login form
+      await this.driver.wait(until.elementLocated(By.css('#ctl00_ctl00_ContentMain_ContentMain_txtUserName')), 10000)
+      
+      // Enter credentials
+      const usernameField = await this.driver.findElement(By.css('#ctl00_ctl00_ContentMain_ContentMain_txtUserName'))
+      const passwordField = await this.driver.findElement(By.css('#ctl00_ctl00_ContentMain_ContentMain_txtPassword'))
+      
+      await usernameField.clear()
+      await usernameField.sendKeys(username)
+      await passwordField.clear()
+      await passwordField.sendKeys(password)
+      
+      // Submit login
+      const loginButton = await this.driver.findElement(By.css('#ctl00_ctl00_ContentMain_ContentMain_btnLogin'))
+      await loginButton.click()
+      
+      // Wait for redirect and verify login success
+      await this.driver.wait(until.urlContains('dashboard'), 10000)
+      
+      return true
+    } catch (error) {
+      console.error('Login failed:', error)
+      return false
+    }
+  }
+  
+  async trackPackage(trackingNumber: string): Promise<TrackingResult> {
+    // Implementation for tracking...
+  }
+}
+```
+
+### Tracking Flow
+```typescript
+interface TrackingResult {
+  trackingNumber: string
+  status: string
+  location?: string
+  lastUpdate?: Date
+  events: TrackingEvent[]
+}
+
+interface TrackingEvent {
+  date: string
+  time: string
+  description: string
+  location: string
+}
+
+async trackPackage(trackingNumber: string): Promise<TrackingResult> {
+  try {
+    // Navigate to tracking page
+    await this.driver.get('https://gls-group.eu/AT/de/tracking')
+    
+    // Enter tracking number
+    const trackingInput = await this.driver.findElement(By.css('#txtTrackingNumber'))
+    await trackingInput.clear()
+    await trackingInput.sendKeys(trackingNumber)
+    
+    // Submit search
+    const searchButton = await this.driver.findElement(By.css('#btnSearch'))
+    await searchButton.click()
+    
+    // Wait for results
+    await this.driver.wait(until.elementLocated(By.css('.tracking-results-table')), 10000)
+    
+    // Extract main tracking info
+    const statusElement = await this.driver.findElement(By.css('td.status-column'))
+    const locationElement = await this.driver.findElement(By.css('td.location-column'))
+    const dateElement = await this.driver.findElement(By.css('td.date-column'))
+    
+    const status = await statusElement.getText()
+    const location = await locationElement.getText()
+    const lastUpdate = new Date(await dateElement.getText())
+    
+    // Get detailed events
+    const detailsLink = await this.driver.findElement(By.css('a.details-link'))
+    await detailsLink.click()
+    
+    await this.driver.wait(until.elementLocated(By.css('.tracking-events-table')), 5000)
+    
+    const eventRows = await this.driver.findElements(By.css('tr.event-row'))
+    const events: TrackingEvent[] = []
+    
+    for (const row of eventRows) {
+      const date = await row.findElement(By.css('.event-date')).getText()
+      const time = await row.findElement(By.css('.event-time')).getText()
+      const description = await row.findElement(By.css('.event-description')).getText()
+      const eventLocation = await row.findElement(By.css('.event-location')).getText()
+      
+      events.push({ date, time, description, location: eventLocation })
+    }
+    
+    return {
+      trackingNumber,
+      status,
+      location,
+      lastUpdate,
+      events
+    }
+    
+  } catch (error) {
+    throw new Error(`Tracking failed: ${error.message}`)
+  }
+}
+```
+
+## Frontend Komponenten-Architektur
+
+### App Structure
+```
+src/
+├── components/
+│   ├── ui/                    # Reusable UI components
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── Modal.tsx
+│   │   └── ProgressBar.tsx
+│   ├── auth/
+│   │   ├── LoginDialog.tsx
+│   │   └── MasterPasswordSetup.tsx
+│   ├── tracking/
+│   │   ├── TrackingList.tsx
+│   │   ├── TrackingItem.tsx
+│   │   ├── TrackingDetails.tsx
+│   │   └── AddTrackingForm.tsx
+│   └── settings/
+│       ├── SettingsDialog.tsx
+│       └── GlsCredentialsForm.tsx
+├── hooks/
+│   ├── useAuth.ts
+│   ├── useTracking.ts
+│   └── useEncryption.ts
+├── services/
+│   ├── api.ts
+│   ├── encryption.ts
+│   └── storage.ts
+├── types/
+│   ├── auth.ts
+│   ├── tracking.ts
+│   └── api.ts
+├── utils/
+│   ├── constants.ts
+│   ├── helpers.ts
+│   └── validation.ts
+└── App.tsx
+```
+
+### Key React Components
+
+#### Main App Component
+```typescript
+// App.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { LoginDialog } from './components/auth/LoginDialog'
+import { MainDashboard } from './pages/MainDashboard'
+import { Settings } from './pages/Settings'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              <Route path="/login" element={<LoginDialog />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <MainDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              } />
+            </Routes>
+            <Toaster />
+          </div>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
+  )
+}
+```
+
+#### Tracking List Component
+```typescript
+// components/tracking/TrackingList.tsx
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Search, Plus } from 'lucide-react'
+import { TrackingItem } from './TrackingItem'
+import { AddTrackingForm } from './AddTrackingForm'
+import { api } from '../../services/api'
+
+export function TrackingList() {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  
+  const { data: trackings, isLoading, refetch } = useQuery({
+    queryKey: ['trackings'],
+    queryFn: api.getTrackings
+  })
+  
+  const filteredTrackings = trackings?.filter(tracking =>
+    tracking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    tracking.trackingNumber.includes(searchTerm)
+  )
+  
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">GLS Sendungsverfolgung</h1>
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus size={20} />
+          Sendung hinzufügen
+        </button>
+      </div>
+      
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input
+          type="text"
+          placeholder="Nach Kunde oder Sendungsnummer suchen..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+      
+      {/* Tracking Items */}
+      <div className="space-y-2">
+        {isLoading ? (
+          <div className="text-center py-8">Lade Sendungen...</div>
+        ) : filteredTrackings?.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">Keine Sendungen gefunden</div>
+        ) : (
+          filteredTrackings?.map((tracking, index) => (
+            <TrackingItem
+              key={tracking.id}
+              tracking={tracking}
+              index={index}
+              total={filteredTrackings.length}
+              onRefresh={refetch}
+            />
+          ))
+        )}
+      </div>
+      
+      {/* Add Form Modal */}
+      {showAddForm && (
+        <AddTrackingForm
+          onClose={() => setShowAddForm(false)}
+          onSuccess={() => {
+            setShowAddForm(false)
+            refetch()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+```
+
+#### Tracking Item Component
+```typescript
+// components/tracking/TrackingItem.tsx
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { Package, MapPin, Calendar, RefreshCw, Trash2 } from 'lucide-react'
+import { TrackingInfo } from '../../types/tracking'
+import { api } from '../../services/api'
+import { formatDate } from '../../utils/helpers'
+
+interface Props {
+  tracking: TrackingInfo
+  index: number
+  total: number
+  onRefresh: () => void
+}
+
+export function TrackingItem({ tracking, index, total, onRefresh }: Props) {
+  const [isUpdating, setIsUpdating] = useState(false)
+  
+  const updateMutation = useMutation({
+    mutationFn: () => api.updateTracking(tracking.id),
+    onSuccess: onRefresh
+  })
+  
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteTracking(tracking.id),
+    onSuccess: onRefresh
+  })
+  
+  const handleUpdate = async () => {
+    setIsUpdating(true)
+    try {
+      await updateMutation.mutateAsync()
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+  
+  const isOverdue = tracking.isOverdue || (
+    tracking.lastUpdate && 
+    Date.now() - new Date(tracking.lastUpdate).getTime() > 5 * 24 * 60 * 60 * 1000
+  )
+  
+  return (
+    <div className={`p-4 border rounded-lg bg-white ${isOverdue ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-2">
+            <Package className="text-blue-600" size={20} />
+            <span className="font-semibold text-gray-900">
+              {tracking.customerName} ({index + 1}/{total})
+            </span>
+            {isOverdue && (
+              <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                Überfällig
+              </span>
+            )}
+          </div>
+          
+          {/* Tracking Number */}
+          <div className="text-sm text-gray-600 mb-2">
+            Sendungsnummer: <span className="font-mono">{tracking.trackingNumber}</span>
+          </div>
+          
+          {/* Status */}
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-1">
+              <Package size={16} className="text-gray-400" />
+              <span>{tracking.status}</span>
+            </div>
+            
+            {tracking.location && (
+              <div className="flex items-center gap-1">
+                <MapPin size={16} className="text-gray-400" />
+                <span>{tracking.location}</span>
+              </div>
+            )}
+            
+            {tracking.lastUpdate && (
+              <div className="flex items-center gap-1">
+                <Calendar size={16} className="text-gray-400" />
+                <span>{formatDate(tracking.lastUpdate)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleUpdate}
+            disabled={isUpdating}
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={isUpdating ? 'animate-spin' : ''} />
+          </button>
+          
+          <button
+            onClick={() => deleteMutation.mutate()}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+## Backend API Endpoints
+
+### Authentication Endpoints
+```typescript
+// routes/auth.ts
+import express from 'express'
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
+import { prisma } from '../lib/prisma'
+import { encryptionService } from '../services/encryption'
+
+const router = express.Router()
+
+// Setup master password (first run)
+router.post('/setup', async (req, res) => {
+  try {
+    const { masterPassword } = req.body
+    
+    // Check if already setup
+    const config = await prisma.appConfig.findFirst()
+    if (config && !config.isFirstRun) {
+      return res.status(400).json({ error: 'Already setup' })
+    }
+    
+    // Hash master password
+    const salt = await bcrypt.genSalt(10)
+    const hash = await bcrypt.hash(masterPassword, salt)
+    
+    // Save to database
+    await prisma.appConfig.upsert({
+      where: { id: 1 },
+      update: {
+        masterPasswordHash: hash,
+        masterPasswordSalt: salt,
+        isFirstRun: false
+      },
+      create: {
+        masterPasswordHash: hash,
+        masterPasswordSalt: salt,
+        isFirstRun: false
+      }
+    })
+    
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Login with master password
+router.post('/login', async (req, res) => {
+  try {
+    const { masterPassword } = req.body
+    
+    const config = await prisma.appConfig.findFirst()
+    if (!config) {
+      return res.status(400).json({ error: 'Not setup' })
+    }
+    
+    // Verify password
+    const isValid = await bcrypt.compare(masterPassword, config.masterPasswordHash)
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid password' })
+    }
+    
+    // Generate JWT
+    const token = jwt.sign(
+      { authenticated: true },
+      process.env.JWT_SECRET!,
+      { expiresIn: '24h' }
+    )
+    
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    })
+    
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+```
+
+### Tracking Endpoints
+```typescript
+// routes/tracking.ts
+import express from 'express'
+import { prisma } from '../lib/prisma'
+import { glsService } from '../services/glsService'
+import { authMiddleware } from '../middleware/auth'
+
+const router = express.Router()
+
+// Get all trackings
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const trackings = await prisma.trackingInfo.findMany({
+      include: {
+        trackingEvents: {
+          orderBy: { createdAt: 'desc' }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    
+    res.json(trackings)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Add new tracking
+router.post('/', authMiddleware, async (req, res) => {
+  try {
+    const { trackingNumber, customerName } = req.body
+    
+    // Create tracking entry
+    const tracking = await prisma.trackingInfo.create({
+      data: {
+        trackingNumber,
+        customerName,
+        status: 'Ausstehend',
+        location: 'Unbekannt'
+      }
+    })
+    
+    // Start background tracking
+    glsService.trackInBackground(tracking.id)
+    
+    res.json(tracking)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Update tracking
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    // Trigger manual update
+    const result = await glsService.updateTracking(parseInt(id))
+    
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Delete tracking
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    await prisma.trackingInfo.delete({
+      where: { id: parseInt(id) }
+    })
+    
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+```
+
+## Encryption Service (Node.js)
+
+```typescript
+// services/encryption.ts
+import crypto from 'crypto'
+import { promisify } from 'util'
+
+const pbkdf2 = promisify(crypto.pbkdf2)
+
+export class EncryptionService {
+  private static readonly ALGORITHM = 'aes-256-cbc'
+  private static readonly KEY_LENGTH = 32
+  private static readonly IV_LENGTH = 16
+  private static readonly SALT_LENGTH = 32
+  private static readonly ITERATIONS = 10000
+  
+  // Generate encryption key from master password
+  static async deriveKey(masterPassword: string, salt: Buffer): Promise<Buffer> {
+    return await pbkdf2(masterPassword, salt, this.ITERATIONS, this.KEY_LENGTH, 'sha256')
+  }
+  
+  // Encrypt data
+  static async encrypt(data: string, masterPassword: string): Promise<string> {
+    try {
+      // Generate random salt and IV
+      const salt = crypto.randomBytes(this.SALT_LENGTH)
+      const iv = crypto.randomBytes(this.IV_LENGTH)
+      
+      // Derive key from master password
+      const key = await this.deriveKey(masterPassword, salt)
+      
+      // Encrypt data
+      const cipher = crypto.createCipher(this.ALGORITHM, key)
+      cipher.setAutoPadding(true)
+      
+      let encrypted = cipher.update(data, 'utf8', 'hex')
+      encrypted += cipher.final('hex')
+      
+      // Combine salt + iv + encrypted data
+      const result = {
+        salt: salt.toString('hex'),
+        iv: iv.toString('hex'),
+        data: encrypted
+      }
+      
+      return Buffer.from(JSON.stringify(result)).toString('base64')
+    } catch (error) {
+      throw new Error(`Encryption failed: ${error.message}`)
+    }
+  }
+  
+  // Decrypt data
+  static async decrypt(encryptedData: string, masterPassword: string): Promise<string> {
+    try {
+      // Parse encrypted data
+      const parsed = JSON.parse(Buffer.from(encryptedData, 'base64').toString('utf8'))
+      const salt = Buffer.from(parsed.salt, 'hex')
+      const iv = Buffer.from(parsed.iv, 'hex')
+      
+      // Derive key from master password
+      const key = await this.deriveKey(masterPassword, salt)
+      
+      // Decrypt data
+      const decipher = crypto.createDecipher(this.ALGORITHM, key)
+      decipher.setAutoPadding(true)
+      
+      let decrypted = decipher.update(parsed.data, 'hex', 'utf8')
+      decrypted += decipher.final('utf8')
+      
+      return decrypted
+    } catch (error) {
+      throw new Error(`Decryption failed: ${error.message}`)
+    }
+  }
+  
+  // Hash password with PBKDF2
+  static async hashPassword(password: string): Promise<{ hash: string, salt: string }> {
+    const salt = crypto.randomBytes(this.SALT_LENGTH)
+    const hash = await pbkdf2(password, salt, this.ITERATIONS, this.KEY_LENGTH, 'sha256')
+    
+    return {
+      hash: hash.toString('hex'),
+      salt: salt.toString('hex')
+    }
+  }
+  
+  // Verify password
+  static async verifyPassword(password: string, storedHash: string, storedSalt: string): Promise<boolean> {
+    const salt = Buffer.from(storedSalt, 'hex')
+    const hash = await pbkdf2(password, salt, this.ITERATIONS, this.KEY_LENGTH, 'sha256')
+    
+    return hash.toString('hex') === storedHash
+  }
+}
+```
+
+## Deployment
+
+### Docker Setup
+```dockerfile
+# Dockerfile
+FROM node:18-alpine
+
+# Install Chrome for Selenium
+RUN apk add --no-cache \
+    chromium \
+    chromium-chromedriver \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Set Chrome path
+ENV CHROME_BIN=/usr/bin/chromium-browser
+ENV CHROME_PATH=/usr/bin/chromium-browser
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy source code
+COPY . .
+
+# Build frontend
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+```
+
+### Environment Variables
+```bash
+# .env
+NODE_ENV=production
+PORT=3000
+JWT_SECRET=your-super-secret-jwt-key-here
+DATABASE_URL="file:./gls_tracking.db"
+
+# Chrome/Selenium Settings
+CHROME_BIN=/usr/bin/chromium-browser
+HEADLESS=true
+
+# Security
+BCRYPT_ROUNDS=12
+AES_KEY_LENGTH=32
+PBKDF2_ITERATIONS=10000
+```
+
+## Wichtige Implementation-Details
+
+### 1. Überfällige Markierung
+- Sendungen älter als 5 Tage → rote Markierung
+- Automatische Prüfung bei jedem Render
+- Datenbankfeld `isOverdue` für persistente Markierung
+
+### 2. Nummerierte Anzeige
+- Format: `Kunde (1/3)` 
+- Dynamische Berechnung basierend auf gefilterten Ergebnissen
+- Update bei Suchfilterung
+
+### 3. ZScaler/VPN Kompatibilität
+```typescript
+const chromeOptions = [
+  '--proxy-auto-detect',
+  '--ignore-certificate-errors',
+  '--ignore-ssl-errors=yes',
+  '--allow-running-insecure-content',
+  '--disable-web-security'
+]
+```
+
+### 4. Suchfunktionalität
+- Real-time Filterung
+- Suche in Kunde UND Sendungsnummer
+- Case-insensitive Matching
+
+### 5. Detaillierter Progress Tracking
+```typescript
+interface ProgressState {
+  step: 'connecting' | 'logging_in' | 'navigating' | 'searching' | 'extracting' | 'complete'
+  message: string
+  progress: number // 0-100
+}
+```
+
+## Testing Strategy
+
+### Unit Tests
+```typescript
+// __tests__/encryption.test.ts
+import { EncryptionService } from '../services/encryption'
+
+describe('EncryptionService', () => {
+  test('should encrypt and decrypt data correctly', async () => {
+    const data = 'sensitive-credential'
+    const password = 'master-password-123'
+    
+    const encrypted = await EncryptionService.encrypt(data, password)
+    const decrypted = await EncryptionService.decrypt(encrypted, password)
+    
+    expect(decrypted).toBe(data)
+  })
+  
+  test('should fail with wrong password', async () => {
+    const data = 'test-data'
+    const encrypted = await EncryptionService.encrypt(data, 'correct-password')
+    
+    await expect(
+      EncryptionService.decrypt(encrypted, 'wrong-password')
+    ).rejects.toThrow('Decryption failed')
+  })
+})
+```
+
+### E2E Tests
+```typescript
+// e2e/tracking.spec.ts
+import { test, expect } from '@playwright/test'
+
+test('should add and track package', async ({ page }) => {
+  await page.goto('/')
+  
+  // Login
+  await page.fill('[data-testid=master-password]', 'test-password')
+  await page.click('[data-testid=login-button]')
+  
+  // Add tracking
+  await page.click('[data-testid=add-tracking-button]')
+  await page.fill('[data-testid=tracking-number]', '12345678901')
+  await page.fill('[data-testid=customer-name]', 'Test Customer')
+  await page.click('[data-testid=submit-button]')
+  
+  // Verify tracking added
+  await expect(page.locator('[data-testid=tracking-item]')).toContainText('Test Customer (1/1)')
+})
+```
+
+## Sicherheits-Checkliste
+
+- [ ] Master Password mit PBKDF2 (10.000 Iterationen)
+- [ ] AES-256 Verschlüsselung für alle sensiblen Daten
+- [ ] Unique Salts für jede Verschlüsselung
+- [ ] JWT Tokens mit kurzer Lebensdauer
+- [ ] HTTP-Only Cookies für Session Management
+- [ ] CSRF Protection aktiviert
+- [ ] Helmet.js für Security Headers
+- [ ] Input Validation und Sanitization
+- [ ] Secure Chrome Options für Selenium
+- [ ] Keine Credentials in Logs oder Fehlerausgaben
+
+## Nächste Schritte
+
+1. **Projekt Setup**: Vite + React + TypeScript initialisieren
+2. **Backend Setup**: Express + Prisma + SQLite konfigurieren
+3. **Authentication**: Master Password System implementieren
+4. **Encryption**: AES-256 Service für Credentials
+5. **Selenium Integration**: GLS Portal Automation
+6. **Frontend Components**: UI für Tracking Management
+7. **Testing**: Unit + E2E Tests hinzufügen
+8. **Deployment**: Docker + Environment Setup
+
+Diese Anleitung bietet alle notwendigen technischen Details für eine vollständige React-Implementation der GLS Tracking App mit identischen Sicherheits- und Funktionalitätsstandards.

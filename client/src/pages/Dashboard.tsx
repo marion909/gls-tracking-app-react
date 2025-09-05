@@ -1,0 +1,513 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  CircularProgress,
+  LinearProgress,
+  Tooltip,
+  FormControlLabel,
+  Checkbox,
+  FormGroup,
+  Card,
+  CardContent,
+  Collapse,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Refresh as RefreshIcon,
+  Delete as DeleteIcon,
+  Warning as WarningIcon,
+  Visibility as ViewIcon,
+  FilterList as FilterIcon,
+  GetApp as LoadIcon,
+} from '@mui/icons-material';
+import { io, Socket } from 'socket.io-client';
+
+interface TrackingInfo {
+  id: number;
+  trackingNumber: string;
+  customerName: string;
+  status: string;
+  location: string;
+  lastUpdate: string;
+  isOverdue: boolean;
+  trackingEvents: TrackingEvent[];
+}
+
+interface TrackingEvent {
+  id: number;
+  date: string;
+  time: string;
+  description: string;
+  location: string;
+}
+
+const Dashboard: React.FC = () => {
+  const [trackings, setTrackings] = useState<TrackingInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedTracking, setSelectedTracking] = useState<TrackingInfo | null>(null);
+  const [error, setError] = useState('');
+  const [masterPassword, setMasterPassword] = useState('');
+  
+  // GLS Portal loading states
+  const [loadingFromGls, setLoadingFromGls] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [progress, setProgress] = useState<{ step: string; message: string; progress: number; timestamp: Date } | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  
+  // Filter states
+  const [hideDelivered, setHideDelivered] = useState(() => {
+    return localStorage.getItem('hideDelivered') === 'true';
+  });
+  const [hideCancelled, setHideCancelled] = useState(() => {
+    return localStorage.getItem('hideCancelled') === 'true';
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    loadTrackings();
+    setupSocket();
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [hideDelivered, hideCancelled]);
+
+  const setupSocket = () => {
+    const token = localStorage.getItem('token') || document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1];
+
+    if (token) {
+      const newSocket = io('http://localhost:5000', {
+        auth: { token }
+      });
+
+      newSocket.on('progress', (data: { step: string; message: string; progress: number; timestamp: Date }) => {
+        setProgress(data);
+        if (data.progress === 100) {
+          setTimeout(() => {
+            setProgress(null);
+            loadTrackings(); // Reload trackings after completion
+          }, 2000);
+        }
+      });
+
+      newSocket.on('connect_error', (err) => {
+        console.error('Socket connection error:', err);
+      });
+
+      setSocket(newSocket);
+    }
+  };
+
+  const handleLoadFromGls = () => {
+    setMasterPassword('');
+    setShowPasswordDialog(true);
+  };
+
+  const confirmLoadFromGls = async () => {
+    if (!masterPassword) {
+      setError('Bitte Master Password eingeben');
+      return;
+    }
+
+    setLoadingFromGls(true);
+    setError('');
+    setSuccess('');
+    setShowPasswordDialog(false);
+    setProgress({ step: 'starting', message: 'Vorbereitung...', progress: 0, timestamp: new Date() });
+
+    try {
+      const response = await fetch('/api/shipments/load-from-gls', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          masterPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Fehler beim Laden der Sendungen');
+      }
+
+      setSuccess(data.message);
+      setMasterPassword('');
+      
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Laden der Sendungen');
+      setProgress(null);
+    } finally {
+      setLoadingFromGls(false);
+    }
+  };
+
+  const loadTrackings = async () => {
+    setLoading(true);
+    try {
+      // Build query parameters for filtering
+      const params = new URLSearchParams();
+      if (hideDelivered) params.append('hideDelivered', 'true');
+      if (hideCancelled) params.append('hideCancelled', 'true');
+      
+      const query = params.toString();
+      const url = query ? `/api/packages?${query}` : '/api/packages';
+      
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setTrackings(data.data);
+      } else {
+        setError(data.message || 'Fehler beim Laden der Sendungen');
+      }
+    } catch (err) {
+      setError('Verbindungsfehler');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter change handlers
+  const handleFilterChange = (filterType: 'delivered' | 'cancelled', checked: boolean) => {
+    if (filterType === 'delivered') {
+      setHideDelivered(checked);
+      localStorage.setItem('hideDelivered', checked.toString());
+    } else {
+      setHideCancelled(checked);
+      localStorage.setItem('hideCancelled', checked.toString());
+    }
+  };
+
+  const deleteTracking = async (id: number) => {
+    if (!window.confirm('Sendung wirklich löschen?')) return;
+
+    try {
+      const response = await fetch(`/api/packages/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        loadTrackings();
+      } else {
+        const data = await response.json();
+        setError(data.message || 'Fehler beim Löschen');
+      }
+    } catch (err) {
+      setError('Verbindungsfehler');
+    }
+  };
+
+  const showDetails = (tracking: TrackingInfo) => {
+    setSelectedTracking(tracking);
+    setDetailsDialogOpen(true);
+  };
+
+  const getStatusColor = (status: string, isOverdue: boolean) => {
+    if (isOverdue) return 'error';
+    switch (status.toLowerCase()) {
+      case 'zugestellt': return 'success';
+      case 'unterwegs': return 'primary';
+      case 'abholbereit': return 'warning';
+      case 'storniert': 
+      case 'cancelled': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1">
+          GLS Sendungsverfolgung
+        </Typography>
+        <Box>
+          <Button
+            variant="contained"
+            startIcon={<LoadIcon />}
+            onClick={handleLoadFromGls}
+            disabled={loading || loadingFromGls}
+          >
+            Vom GLS Portal laden
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Filter Controls */}
+      <Box sx={{ mb: 2 }}>
+        <Button
+          variant="outlined"
+          startIcon={<FilterIcon />}
+          onClick={() => setShowFilters(!showFilters)}
+          sx={{ mb: showFilters ? 2 : 0 }}
+        >
+          Filter
+        </Button>
+        <Collapse in={showFilters}>
+          <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Filter-Optionen
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 3 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={hideDelivered}
+                    onChange={(e) => handleFilterChange('delivered', e.target.checked)}
+                  />
+                }
+                label="Zugestellte ausblenden"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={hideCancelled}
+                    onChange={(e) => handleFilterChange('cancelled', e.target.checked)}
+                  />
+                }
+                label="Stornierte ausblenden"
+              />
+            </Box>
+          </Paper>
+        </Collapse>
+      </Box>
+
+      {/* Progress Display */}
+      {progress && (
+        <Paper sx={{ p: 2, mb: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            {progress.step}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            {progress.message}
+          </Typography>
+          <LinearProgress 
+            variant="determinate" 
+            value={progress.progress} 
+            sx={{ mb: 1 }}
+          />
+          <Typography variant="body2" color="text.secondary">
+            {progress.progress}% abgeschlossen
+          </Typography>
+        </Paper>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
+
+      <Paper>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>#</TableCell>
+                <TableCell>Sendungsnummer</TableCell>
+                <TableCell>Kunde</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Standort</TableCell>
+                <TableCell>Letzte Aktualisierung</TableCell>
+                <TableCell align="center">Aktionen</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {trackings.map((tracking, index) => (
+                <TableRow key={tracking.id}>
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {tracking.trackingNumber}
+                      {tracking.isOverdue && (
+                        <Tooltip title="Überfällig (älter als 5 Tage)">
+                          <WarningIcon color="error" sx={{ ml: 1 }} />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell>{tracking.customerName}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={tracking.status}
+                      color={getStatusColor(tracking.status, tracking.isOverdue)}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>{tracking.location}</TableCell>
+                  <TableCell>
+                    {tracking.lastUpdate ? formatDate(tracking.lastUpdate) : 'Nie'}
+                  </TableCell>
+                  <TableCell align="center">
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => showDetails(tracking)}
+                        title="Details anzeigen"
+                      >
+                        <ViewIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => deleteTracking(tracking.id)}
+                        title="Löschen"
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {trackings.length === 0 && !loading && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">
+                      Keine Sendungen vorhanden
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {loading && <LinearProgress />}
+      </Paper>
+
+      {/* Master Password Dialog */}
+      <Dialog open={showPasswordDialog} onClose={() => setShowPasswordDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Master-Passwort eingeben</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Bitte geben Sie Ihr Master-Passwort ein, um Sendungen vom GLS Portal zu laden.
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Master-Passwort"
+            type="password"
+            fullWidth
+            variant="outlined"
+            value={masterPassword}
+            onChange={(e) => setMasterPassword(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPasswordDialog(false)}>Abbrechen</Button>
+          <Button onClick={confirmLoadFromGls} variant="contained" disabled={loadingFromGls}>
+            Laden
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Details Dialog */}
+      <Dialog
+        open={detailsDialogOpen}
+        onClose={() => setDetailsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Sendungsdetails: {selectedTracking?.trackingNumber}
+        </DialogTitle>
+        <DialogContent>
+          {selectedTracking && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Allgemeine Informationen
+              </Typography>
+              <Typography><strong>Kunde:</strong> {selectedTracking.customerName}</Typography>
+              <Typography><strong>Status:</strong> {selectedTracking.status}</Typography>
+              <Typography><strong>Standort:</strong> {selectedTracking.location}</Typography>
+              <Typography>
+                <strong>Letzte Aktualisierung:</strong>{' '}
+                {selectedTracking.lastUpdate ? formatDate(selectedTracking.lastUpdate) : 'Nie'}
+              </Typography>
+
+              {selectedTracking.trackingEvents.length > 0 && (
+                <>
+                  <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+                    Sendungsverlauf
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Datum</TableCell>
+                          <TableCell>Zeit</TableCell>
+                          <TableCell>Beschreibung</TableCell>
+                          <TableCell>Standort</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {selectedTracking.trackingEvents.map((event, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{event.date}</TableCell>
+                            <TableCell>{event.time}</TableCell>
+                            <TableCell>{event.description}</TableCell>
+                            <TableCell>{event.location}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsDialogOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default Dashboard;

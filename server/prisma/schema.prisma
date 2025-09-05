@@ -1,0 +1,54 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./gls_tracking.db"
+}
+
+model AppConfig {
+  id                  Int      @id @default(autoincrement())
+  masterPasswordHash  String   // PBKDF2 Hash
+  masterPasswordSalt  String   // Random Salt
+  glsUsernameEnc     String?  // AES-256 encrypted
+  glsPasswordEnc     String?  // AES-256 encrypted
+  encryptionSalt     String?  // For AES encryption
+  isFirstRun         Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("app_config")
+}
+
+model TrackingInfo {
+  id             Int      @id @default(autoincrement())
+  trackingNumber String   @unique
+  customerName   String
+  status         String
+  location       String?
+  lastUpdate     DateTime?
+  isOverdue      Boolean  @default(false)
+  trackingEvents TrackingEvent[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("tracking_info")
+}
+
+model TrackingEvent {
+  id           Int         @id @default(autoincrement())
+  trackingInfo TrackingInfo @relation(fields: [trackingId], references: [id], onDelete: Cascade)
+  trackingId   Int
+  date         String
+  time         String
+  description  String
+  location     String
+  createdAt    DateTime    @default(now())
+
+  @@unique([trackingId, date, time], name: "trackingId_date_time")
+  @@map("tracking_events")
+}
