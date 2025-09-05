@@ -21,7 +21,7 @@ class EncryptionService {
             // Derive key from master password
             const key = await this.deriveKey(masterPassword, salt);
             // Encrypt data
-            const cipher = crypto_1.default.createCipher(this.ALGORITHM, key);
+            const cipher = crypto_1.default.createCipheriv(this.ALGORITHM, key, iv);
             cipher.setAutoPadding(true);
             let encrypted = cipher.update(data, 'utf8', 'hex');
             encrypted += cipher.final('hex');
@@ -47,7 +47,7 @@ class EncryptionService {
             // Derive key from master password
             const key = await this.deriveKey(masterPassword, salt);
             // Decrypt data
-            const decipher = crypto_1.default.createDecipher(this.ALGORITHM, key);
+            const decipher = crypto_1.default.createDecipheriv(this.ALGORITHM, key, iv);
             decipher.setAutoPadding(true);
             let decrypted = decipher.update(parsed.data, 'hex', 'utf8');
             decrypted += decipher.final('utf8');

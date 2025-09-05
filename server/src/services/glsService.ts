@@ -116,7 +116,7 @@ export class GlsService {
 
       for (const selector of usernameSelectors) {
         try {
-          usernameField = await this.driver!.wait(until.elementLocated(selector), 5000);
+          usernameField = await this.driver!.wait(until.elementLocated(selector), 200);
           if (await usernameField.isDisplayed() && await usernameField.isEnabled()) {
             console.log(`✅ Username-Feld gefunden mit: ${selector}`);
             break;
@@ -285,7 +285,7 @@ export class GlsService {
       const detailsLink = await this.driver.findElement(By.css('a.details-link'));
       await detailsLink.click();
 
-      await this.driver.wait(until.elementLocated(By.css('.tracking-events-table')), 5000);
+      await this.driver.wait(until.elementLocated(By.css('.tracking-events-table')), 100);
 
       const eventRows = await this.driver.findElements(By.css('tr.event-row'));
       const events: TrackingEvent[] = [];
@@ -304,7 +304,7 @@ export class GlsService {
         }
       }
 
-      progressCallback?.('complete', 'Tracking erfolgreich abgeschlossen', 100);
+      progressCallback?.('complete', 'Tracking erfolgreich abgeschlossen', 50);
 
       return {
         trackingNumber,
@@ -339,7 +339,7 @@ export class GlsService {
       progressCallback?.('processing', 'Sendungsdaten werden verarbeitet...', 50);
 
       // Scrape shipment details using improved method
-      const shipmentDetails = await this.scrapeShipmentDetails();
+      const shipmentDetails = await this.scrapeShipmentDetails(progressCallback);
 
       progressCallback?.('complete', `${shipmentDetails.length} Sendungen erfolgreich geladen`, 100);
 
@@ -467,7 +467,7 @@ export class GlsService {
     }
   }
 
-  private async scrapeShipmentDetails(): Promise<ShipmentSummary[]> {
+  private async scrapeShipmentDetails(progressCallback?: ProgressCallback): Promise<ShipmentSummary[]> {
     const shipmentDetails: ShipmentSummary[] = [];
 
     try {
@@ -498,12 +498,17 @@ export class GlsService {
           const elements = await this.driver!.findElements(By.css(selector));
           console.log(`🔍 Selektor '${selector}': ${elements.length} Elemente gefunden`);
 
-          for (const element of elements) {
+          for (let i = 0; i < elements.length; i++) {
             try {
+              const element = elements[i];
               const trackingNumber = (await element.getText())?.trim();
               if (trackingNumber && this.isValidTrackingNumber(trackingNumber)) {
                 // Check if this tracking number was already captured
                 if (!shipmentDetails.some(s => s.trackingNumber === trackingNumber)) {
+                  // Progress update
+                  const progressPercent = 50 + (i / elements.length) * 40; // 50% to 90%
+                  progressCallback?.('processing', `Verarbeite Sendung ${i + 1}/${elements.length}: ${trackingNumber}`, Math.round(progressPercent));
+                  
                   // Collect additional details for this shipment
                   const shipmentDetail = await this.extractShipmentDetails(element, trackingNumber);
                   shipmentDetails.push(shipmentDetail);

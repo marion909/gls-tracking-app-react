@@ -56,6 +56,15 @@ class SocketService {
             timestamp: new Date()
         });
     }
+    // Emit general progress updates (for loading shipments etc.)
+    emitProgress(step, message, progress) {
+        this.io.emit('progress', {
+            step,
+            message,
+            progress,
+            timestamp: new Date()
+        });
+    }
     // Emit tracking updates
     emitTrackingUpdate(trackingNumber, data) {
         this.io.to(`tracking-${trackingNumber}`).emit('tracking-update', {

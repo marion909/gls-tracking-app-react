@@ -33,7 +33,44 @@ const addTrackingSchema = joi_1.default.object({
 // Get all trackings
 router.get('/', authMiddleware, async (req, res) => {
     try {
+        const { hideDelivered, hideCancelled } = req.query;
+        // Build filter conditions
+        const whereConditions = {};
+        if (hideDelivered === 'true' || hideCancelled === 'true') {
+            if (hideDelivered === 'true' && hideCancelled === 'true') {
+                // Hide both delivered and cancelled
+                whereConditions.AND = [
+                    { NOT: { status: { contains: 'zugestellt' } } },
+                    { NOT: { status: { contains: 'delivered' } } },
+                    { NOT: { status: { contains: 'Zugestellt' } } },
+                    { NOT: { status: { contains: 'ZUGESTELLT' } } },
+                    { NOT: { status: { contains: 'storniert' } } },
+                    { NOT: { status: { contains: 'cancelled' } } },
+                    { NOT: { status: { contains: 'Storniert' } } },
+                    { NOT: { status: { contains: 'STORNIERT' } } }
+                ];
+            }
+            else if (hideDelivered === 'true') {
+                // Hide only delivered
+                whereConditions.AND = [
+                    { NOT: { status: { contains: 'zugestellt' } } },
+                    { NOT: { status: { contains: 'delivered' } } },
+                    { NOT: { status: { contains: 'Zugestellt' } } },
+                    { NOT: { status: { contains: 'ZUGESTELLT' } } }
+                ];
+            }
+            else if (hideCancelled === 'true') {
+                // Hide only cancelled
+                whereConditions.AND = [
+                    { NOT: { status: { contains: 'storniert' } } },
+                    { NOT: { status: { contains: 'cancelled' } } },
+                    { NOT: { status: { contains: 'Storniert' } } },
+                    { NOT: { status: { contains: 'STORNIERT' } } }
+                ];
+            }
+        }
         const trackings = await prisma.trackingInfo.findMany({
+            where: whereConditions,
             include: {
                 trackingEvents: {
                     orderBy: { createdAt: 'desc' }

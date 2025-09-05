@@ -11,8 +11,9 @@ const prisma = new PrismaClient();
 let socketServiceInstance: any = null;
 const getSocketService = () => {
   if (!socketServiceInstance) {
-    // Lazy load to avoid circular dependency
-    socketServiceInstance = require('../index').socketService;
+    // Direct require to avoid circular dependency
+    const { socketService } = require('../index');
+    socketServiceInstance = socketService;
   }
   return socketServiceInstance;
 };
@@ -74,7 +75,18 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
 
     // Setup progress callback for real-time updates
     const progressCallback = (step: string, message: string, progress: number) => {
-      getSocketService().emitProgress(step, message, progress);
+      console.log(`🔄 Progress Update: ${step} - ${message} (${progress}%)`);
+      try {
+        const socketService = getSocketService();
+        if (socketService) {
+          socketService.emitProgress(step, message, progress);
+          console.log(`✅ Progress emitted via Socket.IO: ${progress}%`);
+        } else {
+          console.log('❌ Socket service not available');
+        }
+      } catch (error) {
+        console.log(`❌ Error emitting progress: ${error}`);
+      }
     };
 
     // Login to GLS and load shipments

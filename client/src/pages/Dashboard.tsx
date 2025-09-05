@@ -19,19 +19,13 @@ import {
   DialogActions,
   TextField,
   Alert,
-  CircularProgress,
   LinearProgress,
   Tooltip,
   FormControlLabel,
   Checkbox,
-  FormGroup,
-  Card,
-  CardContent,
   Collapse,
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
   Delete as DeleteIcon,
   Warning as WarningIcon,
   Visibility as ViewIcon,
@@ -70,7 +64,6 @@ const Dashboard: React.FC = () => {
   // GLS Portal loading states
   const [loadingFromGls, setLoadingFromGls] = useState(false);
   const [success, setSuccess] = useState('');
-  const [progress, setProgress] = useState<{ step: string; message: string; progress: number; timestamp: Date } | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   
@@ -105,16 +98,6 @@ const Dashboard: React.FC = () => {
         auth: { token }
       });
 
-      newSocket.on('progress', (data: { step: string; message: string; progress: number; timestamp: Date }) => {
-        setProgress(data);
-        if (data.progress === 100) {
-          setTimeout(() => {
-            setProgress(null);
-            loadTrackings(); // Reload trackings after completion
-          }, 2000);
-        }
-      });
-
       newSocket.on('connect_error', (err) => {
         console.error('Socket connection error:', err);
       });
@@ -138,7 +121,6 @@ const Dashboard: React.FC = () => {
     setError('');
     setSuccess('');
     setShowPasswordDialog(false);
-    setProgress({ step: 'starting', message: 'Vorbereitung...', progress: 0, timestamp: new Date() });
 
     try {
       const response = await fetch('/api/shipments/load-from-gls', {
@@ -163,7 +145,6 @@ const Dashboard: React.FC = () => {
       
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Sendungen');
-      setProgress(null);
     } finally {
       setLoadingFromGls(false);
     }
@@ -311,26 +292,6 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Collapse>
       </Box>
-
-      {/* Progress Display */}
-      {progress && (
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            {progress.step}
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            {progress.message}
-          </Typography>
-          <LinearProgress 
-            variant="determinate" 
-            value={progress.progress} 
-            sx={{ mb: 1 }}
-          />
-          <Typography variant="body2" color="text.secondary">
-            {progress.progress}% abgeschlossen
-          </Typography>
-        </Paper>
-      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>

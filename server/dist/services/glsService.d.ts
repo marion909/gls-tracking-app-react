@@ -5,6 +5,14 @@ export interface TrackingResult {
     lastUpdate?: Date;
     events: TrackingEvent[];
 }
+export interface ShipmentSummary {
+    trackingNumber: string;
+    customerName: string;
+    status: string;
+    location?: string;
+    lastUpdate?: Date;
+    isOverdue: boolean;
+}
 export interface TrackingEvent {
     date: string;
     time: string;
@@ -18,10 +26,16 @@ export declare class GlsService {
     private driver;
     private headless;
     constructor(headless?: boolean);
-    private setupChromeOptions;
+    private setupEdgeOptions;
     initializeDriver(): Promise<void>;
     login(username: string, password: string, progressCallback?: ProgressCallback): Promise<boolean>;
     trackPackage(trackingNumber: string, progressCallback?: ProgressCallback): Promise<TrackingResult>;
+    loadAllShipments(progressCallback?: ProgressCallback): Promise<ShipmentSummary[]>;
+    private clickSearchButton;
+    private scrapeShipmentDetails;
+    private extractShipmentDetails;
+    private isValidTrackingNumber;
+    private extractTextSafely;
     quit(): Promise<void>;
 }
 export declare const glsService: GlsService;

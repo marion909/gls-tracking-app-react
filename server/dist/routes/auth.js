@@ -12,7 +12,9 @@ const router = express_1.default.Router();
 const prisma = new client_1.PrismaClient();
 // Validation schemas
 const setupSchema = joi_1.default.object({
-    masterPassword: joi_1.default.string().min(8).required()
+    masterPassword: joi_1.default.string().min(8).required(),
+    glsUsername: joi_1.default.string().required(),
+    glsPassword: joi_1.default.string().required()
 });
 const loginSchema = joi_1.default.object({
     masterPassword: joi_1.default.string().required()
@@ -45,7 +47,7 @@ router.post('/setup', async (req, res) => {
         if (error) {
             return res.status(400).json({ success: false, message: error.details[0].message });
         }
-        const { masterPassword } = value;
+        const { masterPassword, glsUsername, glsPassword } = value;
         // Check if already setup
         const config = await prisma.appConfig.findFirst();
         if (config && !config.isFirstRun) {
@@ -53,21 +55,28 @@ router.post('/setup', async (req, res) => {
         }
         // Hash master password
         const { hash, salt } = await encryptionService_1.EncryptionService.hashPassword(masterPassword);
+        // Encrypt GLS credentials
+        const encryptedGlsUsername = await encryptionService_1.EncryptionService.encrypt(glsUsername, masterPassword);
+        const encryptedGlsPassword = await encryptionService_1.EncryptionService.encrypt(glsPassword, masterPassword);
         // Save to database
         await prisma.appConfig.upsert({
             where: { id: 1 },
             update: {
                 masterPasswordHash: hash,
                 masterPasswordSalt: salt,
+                glsUsernameEnc: encryptedGlsUsername,
+                glsPasswordEnc: encryptedGlsPassword,
                 isFirstRun: false
             },
             create: {
                 masterPasswordHash: hash,
                 masterPasswordSalt: salt,
+                glsUsernameEnc: encryptedGlsUsername,
+                glsPasswordEnc: encryptedGlsPassword,
                 isFirstRun: false
             }
         });
-        res.json({ success: true, message: 'Master Password erfolgreich eingerichtet' });
+        res.json({ success: true, message: 'Setup erfolgreich abgeschlossen' });
     }
     catch (error) {
         console.error('Setup error:', error);

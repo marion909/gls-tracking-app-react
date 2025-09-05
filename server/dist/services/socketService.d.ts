@@ -6,6 +6,7 @@ export declare class SocketService {
     private setupSocketAuth;
     private setupEventHandlers;
     emitTrackingProgress(trackingNumber: string, step: string, message: string, progress: number): void;
+    emitProgress(step: string, message: string, progress: number): void;
     emitTrackingUpdate(trackingNumber: string, data: any): void;
     getIO(): Server<import("socket.io").DefaultEventsMap, import("socket.io").DefaultEventsMap, import("socket.io").DefaultEventsMap, any>;
 }
