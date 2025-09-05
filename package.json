@@ -8,6 +8,8 @@
     "server": "cd server && npm run dev",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
+    "production": "concurrently \"npm run server\" \"npm run serve-build\"",
+    "serve-build": "cd client && serve -s build -l 3000",
     "install-deps": "npm install && cd server && npm install && cd ../client && npm install",
     "start": "cd server && npm start"
   },

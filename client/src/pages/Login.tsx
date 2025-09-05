@@ -11,6 +11,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useAuth } from '../hooks/useAuth';
+import { apiFetch } from '../services/apiService';
 
 const Login: React.FC = () => {
   const [masterPassword, setMasterPassword] = useState('');
@@ -31,7 +32,7 @@ const Login: React.FC = () => {
 
   const checkAppStatus = async () => {
     try {
-      const response = await fetch('/api/auth/status');
+      const response = await apiFetch('/api/auth/status');
       const data = await response.json();
       
       if (response.ok) {

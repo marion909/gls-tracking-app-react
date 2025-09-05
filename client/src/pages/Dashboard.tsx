@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { io, Socket } from 'socket.io-client';
 import { SessionTimer } from '../components/SessionTimer';
+import { apiFetch } from '../services/apiService';
 
 interface TrackingInfo {
   id: number;
@@ -129,12 +130,8 @@ const Dashboard: React.FC = () => {
     setShowPasswordDialog(false);
 
     try {
-      const response = await fetch('/api/shipments/load-from-gls', {
+      const response = await apiFetch('/api/shipments/load-from-gls', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
         body: JSON.stringify({
           masterPassword
         })
@@ -169,11 +166,9 @@ const Dashboard: React.FC = () => {
       if (hideCancelled) params.append('hideCancelled', 'true');
       
       const query = params.toString();
-      const url = query ? `/api/packages?${query}` : '/api/packages';
+      const endpoint = query ? `/api/packages?${query}` : '/api/packages';
       
-      const response = await fetch(url, {
-        credentials: 'include',
-      });
+      const response = await apiFetch(endpoint);
       const data = await response.json();
       
       if (response.ok) {
@@ -191,9 +186,7 @@ const Dashboard: React.FC = () => {
   const loadLastSync = async () => {
     try {
       console.log('🔍 Loading last sync information...');
-      const response = await fetch('/api/shipments/last-sync', {
-        credentials: 'include',
-      });
+      const response = await apiFetch('/api/shipments/last-sync');
       const data = await response.json();
       
       console.log('📡 Last sync response:', { 

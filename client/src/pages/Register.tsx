@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { PersonAdd } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
+import { apiFetch } from '../services/apiService';
 
 interface SetupData {
   masterPassword: string;
@@ -93,11 +94,8 @@ const Register: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/setup', {
+      const response = await apiFetch('/api/auth/setup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           masterPassword: formData.masterPassword,
           glsUsername: formData.glsUsername,

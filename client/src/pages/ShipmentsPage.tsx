@@ -33,6 +33,7 @@ import {
   Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { io, Socket } from 'socket.io-client';
+import { apiFetch } from '../services/apiService';
 
 interface Shipment {
   id: number;
@@ -108,9 +109,7 @@ const ShipmentsPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/shipments/list', {
-        credentials: 'include'
-      });
+      const response = await apiFetch('/api/shipments/list');
 
       const data = await response.json();
 
@@ -144,12 +143,8 @@ const ShipmentsPage: React.FC = () => {
     setProgress({ step: 'starting', message: 'Vorbereitung...', progress: 0, timestamp: new Date() });
 
     try {
-      const response = await fetch('/api/shipments/load-from-gls', {
+      const response = await apiFetch('/api/shipments/load-from-gls', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
         body: JSON.stringify({
           masterPassword
         })
