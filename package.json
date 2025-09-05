@@ -1,6 +1,6 @@
 {
   "name": "gls-tracking-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GLS Package Tracking Application with React frontend and Node.js backend",
   "main": "server/index.js",
   "scripts": {
