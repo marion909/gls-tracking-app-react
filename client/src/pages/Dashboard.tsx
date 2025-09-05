@@ -76,6 +76,9 @@ const Dashboard: React.FC = () => {
   const [hideCancelled, setHideCancelled] = useState(() => {
     return localStorage.getItem('hideCancelled') === 'true';
   });
+  const [hideOverdue, setHideOverdue] = useState(() => {
+    return localStorage.getItem('hideOverdue') === 'true';
+  });
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -239,13 +242,16 @@ const Dashboard: React.FC = () => {
   };
 
   // Filter change handlers
-  const handleFilterChange = (filterType: 'delivered' | 'cancelled', checked: boolean) => {
+  const handleFilterChange = (filterType: 'delivered' | 'cancelled' | 'overdue', checked: boolean) => {
     if (filterType === 'delivered') {
       setHideDelivered(checked);
       localStorage.setItem('hideDelivered', checked.toString());
-    } else {
+    } else if (filterType === 'cancelled') {
       setHideCancelled(checked);
       localStorage.setItem('hideCancelled', checked.toString());
+    } else if (filterType === 'overdue') {
+      setHideOverdue(checked);
+      localStorage.setItem('hideOverdue', checked.toString());
     }
   };
 
@@ -356,6 +362,15 @@ const Dashboard: React.FC = () => {
                 }
                 label="Stornierte ausblenden"
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={hideOverdue}
+                    onChange={(e) => handleFilterChange('overdue', e.target.checked)}
+                  />
+                }
+                label="Überfällige ausblenden"
+              />
             </Box>
           </Paper>
         </Collapse>
@@ -388,7 +403,50 @@ const Dashboard: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {trackings.map((tracking, index) => (
+              {trackings
+                .filter(tracking => {
+                  if (hideCancelled && tracking.status === 'Storniert') return false;
+                  if (hideDelivered && tracking.status === 'Zugestellt') return false;
+                  if (hideOverdue && tracking.isOverdue) return false;
+                  return true;
+                })
+                .sort((a, b) => {
+                  // Sort by customer name first, then by tracking number
+                  const customerCompare = a.customerName.localeCompare(b.customerName, 'de', { 
+                    sensitivity: 'base',
+                    numeric: true 
+                  });
+                  if (customerCompare !== 0) return customerCompare;
+                  
+                  // If same customer, sort by tracking number
+                  return a.trackingNumber.localeCompare(b.trackingNumber);
+                })
+                .map((tracking, index) => {
+                  // Get filtered and sorted customer trackings for counter
+                  const allFilteredTrackings = trackings
+                    .filter(t => 
+                      !(hideCancelled && t.status === 'Storniert') &&
+                      !(hideDelivered && t.status === 'Zugestellt') &&
+                      !(hideOverdue && t.isOverdue)
+                    )
+                    .sort((a, b) => {
+                      const customerCompare = a.customerName.localeCompare(b.customerName, 'de', { 
+                        sensitivity: 'base',
+                        numeric: true 
+                      });
+                      if (customerCompare !== 0) return customerCompare;
+                      return a.trackingNumber.localeCompare(b.trackingNumber);
+                    });
+
+                  const customerTrackings = allFilteredTrackings.filter(t => 
+                    t.customerName === tracking.customerName
+                  );
+                  
+                  const customerDisplayName = customerTrackings.length > 1 
+                    ? `${tracking.customerName} (${customerTrackings.findIndex(t => t.id === tracking.id) + 1}/${customerTrackings.length})`
+                    : tracking.customerName;
+
+                  return (
                 <TableRow 
                   key={tracking.id}
                   sx={{
@@ -409,7 +467,7 @@ const Dashboard: React.FC = () => {
                       )}
                     </Box>
                   </TableCell>
-                  <TableCell>{tracking.customerName}</TableCell>
+                  <TableCell>{customerDisplayName}</TableCell>
                   <TableCell>{tracking.address || 'Unbekannt'}</TableCell>
                   <TableCell>
                     <Chip
@@ -441,7 +499,8 @@ const Dashboard: React.FC = () => {
                     </Box>
                   </TableCell>
                 </TableRow>
-              ))}
+                  );
+                })}
               {trackings.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
