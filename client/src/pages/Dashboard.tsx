@@ -40,7 +40,7 @@ interface TrackingInfo {
   trackingNumber: string;
   customerName: string;
   status: string;
-  location: string;
+  address: string;
   lastUpdate: string;
   isOverdue: boolean;
   trackingEvents: TrackingEvent[];
@@ -381,8 +381,8 @@ const Dashboard: React.FC = () => {
                 <TableCell>#</TableCell>
                 <TableCell>Sendungsnummer</TableCell>
                 <TableCell>Kunde</TableCell>
+                <TableCell>Adressen</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Standort</TableCell>
                 <TableCell>Letzte Aktualisierung</TableCell>
                 <TableCell align="center">Aktionen</TableCell>
               </TableRow>
@@ -410,6 +410,7 @@ const Dashboard: React.FC = () => {
                     </Box>
                   </TableCell>
                   <TableCell>{tracking.customerName}</TableCell>
+                  <TableCell>{tracking.address || 'Unbekannt'}</TableCell>
                   <TableCell>
                     <Chip
                       label={tracking.status}
@@ -417,7 +418,6 @@ const Dashboard: React.FC = () => {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>{tracking.location}</TableCell>
                   <TableCell>
                     {tracking.lastUpdate ? formatDate(tracking.lastUpdate) : 'Nie'}
                   </TableCell>
@@ -501,7 +501,7 @@ const Dashboard: React.FC = () => {
               </Typography>
               <Typography><strong>Kunde:</strong> {selectedTracking.customerName}</Typography>
               <Typography><strong>Status:</strong> {selectedTracking.status}</Typography>
-              <Typography><strong>Standort:</strong> {selectedTracking.location}</Typography>
+              <Typography><strong>Adressen:</strong> {selectedTracking.address}</Typography>
               <Typography>
                 <strong>Letzte Aktualisierung:</strong>{' '}
                 {selectedTracking.lastUpdate ? formatDate(selectedTracking.lastUpdate) : 'Nie'}

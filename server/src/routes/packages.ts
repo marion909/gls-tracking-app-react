@@ -132,7 +132,7 @@ router.post('/', authMiddleware, async (req, res) => {
         trackingNumber,
         customerName,
         status: 'Ausstehend',
-        location: 'Unbekannt'
+        address: 'Unbekannt'
       }
     });
 
@@ -202,7 +202,7 @@ router.put('/:id', authMiddleware, async (req: any, res) => {
         where: { id: trackingId },
         data: {
           status: trackingResult.status,
-          location: trackingResult.location,
+          address: trackingResult.address,
           lastUpdate: trackingResult.lastUpdate || new Date(),
           isOverdue: false
         }

@@ -4,7 +4,7 @@ import edge from 'selenium-webdriver/edge';
 export interface TrackingResult {
   trackingNumber: string;
   status: string;
-  location?: string;
+  address?: string;
   lastUpdate?: Date;
   events: TrackingEvent[];
 }
@@ -13,7 +13,7 @@ export interface ShipmentSummary {
   trackingNumber: string;
   customerName: string;
   status: string;
-  location?: string;
+  address?: string;
   lastUpdate?: Date;
   isOverdue: boolean;
 }
@@ -277,7 +277,7 @@ export class GlsService {
       const dateElement = await this.driver.findElement(By.css('td.date-column'));
 
       const status = await statusElement.getText();
-      const location = await locationElement.getText();
+      const address = await locationElement.getText();
       const lastUpdateText = await dateElement.getText();
       const lastUpdate = new Date(lastUpdateText);
 
@@ -309,7 +309,7 @@ export class GlsService {
       return {
         trackingNumber,
         status,
-        location,
+        address,
         lastUpdate,
         events
       };
@@ -606,7 +606,7 @@ export class GlsService {
       trackingNumber,
       customerName: 'Unbekannt',
       status: 'Unbekannt',
-      location: undefined,
+      address: undefined,
       lastUpdate: undefined,
       isOverdue: false
     };
@@ -774,6 +774,47 @@ export class GlsService {
             }
           } catch (error: any) {
             console.log(`⚠️ Fehler bei Datum-Selektor '${selector}': ${error.message}`);
+          }
+        }
+
+        // Search for address information
+        console.log('🔍 Suche Adressen-Information...');
+
+        const addressSelectors = [
+          // Specific search for displayAddress cell as provided by user
+          './/td[contains(@id, "displayAddress_")]',
+          './/td[contains(@ng-attr-id, "displayAddress_")]',
+          
+          // Fallback: General search for address patterns
+          './/td[contains(@ng-show, "displayAddress")]',
+          './/td[contains(@class, "ng-binding") and contains(text(), "-")]'
+        ];
+
+        for (const selector of addressSelectors) {
+          try {
+            const addressElements = await parentRow.findElements(By.xpath(selector));
+            for (const addressElement of addressElements) {
+              const text = (await addressElement.getText())?.trim();
+
+              console.log(`🔍 Prüfe potentielle Adresse: '${text}'`);
+
+              // Check if it looks like an address (contains country code and postal code)
+              if (text && 
+                  text.length >= 5 &&
+                  (text.includes('-') || text.match(/^\w{2}-?\d+/)) &&
+                  text !== trackingNumber &&
+                  !this.isValidTrackingNumber(text)) {
+                shipmentDetail.address = text;
+                console.log(`✅ Adresse gefunden mit Selektor '${selector}': ${text}`);
+                break;
+              }
+            }
+
+            if (shipmentDetail.address) {
+              break;
+            }
+          } catch (error: any) {
+            console.log(`⚠️ Fehler bei Adressen-Selektor '${selector}': ${error.message}`);
           }
         }
       }

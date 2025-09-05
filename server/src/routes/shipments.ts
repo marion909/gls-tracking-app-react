@@ -140,7 +140,7 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
         update: {
           customerName: shipment.customerName,
           status: shipment.status,
-          location: shipment.location,
+          address: shipment.address,
           lastUpdate: shipment.lastUpdate,
           isOverdue: shipment.isOverdue,
           updatedAt: new Date()
@@ -149,7 +149,7 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
           trackingNumber: shipment.trackingNumber,
           customerName: shipment.customerName,
           status: shipment.status,
-          location: shipment.location,
+          address: shipment.address,
           lastUpdate: shipment.lastUpdate,
           isOverdue: shipment.isOverdue
         }
@@ -435,7 +435,7 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
       where: { trackingNumber },
       update: {
         status: trackingResult.status,
-        location: trackingResult.location,
+        address: trackingResult.address,
         lastUpdate: trackingResult.lastUpdate,
         isOverdue: false, // Will be calculated after retrieval
         updatedAt: new Date()
@@ -444,7 +444,7 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
         trackingNumber,
         customerName: 'Unbekannt',
         status: trackingResult.status,
-        location: trackingResult.location,
+        address: trackingResult.address,
         lastUpdate: trackingResult.lastUpdate,
         isOverdue: false // Will be calculated after retrieval
       },

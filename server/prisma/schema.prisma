@@ -30,7 +30,7 @@ model TrackingInfo {
   trackingNumber String   @unique
   customerName   String
   status         String
-  location       String?
+  address        String?
   lastUpdate     DateTime?
   isOverdue      Boolean  @default(false)
   trackingEvents TrackingEvent[]
