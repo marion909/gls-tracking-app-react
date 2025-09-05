@@ -186,20 +186,32 @@ const Dashboard: React.FC = () => {
 
   const loadLastSync = async () => {
     try {
+      console.log('🔍 Loading last sync information...');
       const response = await fetch('/api/shipments/last-sync', {
         credentials: 'include',
       });
       const data = await response.json();
       
+      console.log('📡 Last sync response:', { 
+        ok: response.ok, 
+        status: response.status, 
+        data: data 
+      });
+      
       if (response.ok && data.data.lastSync) {
-        setLastGlsSync(new Date(data.data.lastSync));
+        const syncDate = new Date(data.data.lastSync);
+        console.log('✅ Setting last sync date:', syncDate);
+        setLastGlsSync(syncDate);
+      } else {
+        console.log('❌ No lastSync data found or response not ok');
       }
     } catch (err) {
-      console.error('Fehler beim Laden der letzten Sync-Information:', err);
+      console.error('❌ Fehler beim Laden der letzten Sync-Information:', err);
     }
   };
 
   const formatLastSync = (date: Date | null): string => {
+    console.log('🕐 Formatting last sync date:', date);
     if (!date) return 'Noch nie geladen';
     
     const now = new Date();

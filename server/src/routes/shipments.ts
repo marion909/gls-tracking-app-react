@@ -132,13 +132,18 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
     await glsService.quit();
 
     // Update lastGlsSync timestamp
+    const syncTimestamp = new Date();
+    console.log('📅 Updating lastGlsSync to:', syncTimestamp);
+    
     await prisma.appConfig.update({
       where: { id: config.id },
       data: { 
-        lastGlsSync: new Date(),
-        updatedAt: new Date()
+        lastGlsSync: syncTimestamp,
+        updatedAt: syncTimestamp
       }
     });
+    
+    console.log('✅ LastGlsSync updated successfully');
 
     progressCallback('complete', `${shipments.length} Sendungen erfolgreich geladen und gespeichert`, 100);
 
@@ -148,7 +153,7 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
       data: {
         count: shipments.length,
         shipments: shipments,
-        lastSync: new Date()
+        lastSync: syncTimestamp
       }
     });
 
@@ -253,6 +258,33 @@ router.get('/list', authenticateToken, async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Fehler beim Laden der Sendungen' 
+    });
+  }
+});
+
+// Get last sync information
+router.get('/last-sync', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔍 Getting last sync information...');
+    const config = await prisma.appConfig.findFirst();
+    
+    console.log('📊 Config found:', { 
+      id: config?.id, 
+      lastGlsSync: config?.lastGlsSync 
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        lastSync: config?.lastGlsSync || null
+      }
+    });
+
+  } catch (error: any) {
+    console.error('❌ Get last sync error:', error);
+    res.status(500).json({
+      success: false,
+      message: `Fehler beim Abrufen der Sync-Information: ${error.message}`
     });
   }
 });
@@ -418,27 +450,6 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
     res.status(500).json({ 
       success: false, 
       message: `Aktualisierung fehlgeschlagen: ${error.message}` 
-    });
-  }
-});
-
-// Get last sync information
-router.get('/last-sync', authenticateToken, async (req, res) => {
-  try {
-    const config = await prisma.appConfig.findFirst();
-    
-    res.json({
-      success: true,
-      data: {
-        lastSync: config?.lastGlsSync || null
-      }
-    });
-
-  } catch (error: any) {
-    console.error('Get last sync error:', error);
-    res.status(500).json({
-      success: false,
-      message: `Fehler beim Abrufen der Sync-Information: ${error.message}`
     });
   }
 });
