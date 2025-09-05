@@ -389,7 +389,15 @@ const Dashboard: React.FC = () => {
             </TableHead>
             <TableBody>
               {trackings.map((tracking, index) => (
-                <TableRow key={tracking.id}>
+                <TableRow 
+                  key={tracking.id}
+                  sx={{
+                    backgroundColor: tracking.isOverdue ? 'rgba(211, 47, 47, 0.08)' : 'inherit',
+                    '&:hover': {
+                      backgroundColor: tracking.isOverdue ? 'rgba(211, 47, 47, 0.12)' : 'rgba(0, 0, 0, 0.04)'
+                    }
+                  }}
+                >
                   <TableCell>{index + 1}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>

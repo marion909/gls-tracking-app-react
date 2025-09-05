@@ -79,14 +79,23 @@ router.get('/', authMiddleware, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Check for overdue packages (older than 5 days)
+    // Check for overdue packages (older than 5 days and not delivered/cancelled)
     const fiveDaysAgo = new Date();
     fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
-    const trackingsWithOverdue = trackings.map((tracking: any) => ({
-      ...tracking,
-      isOverdue: tracking.lastUpdate && new Date(tracking.lastUpdate) < fiveDaysAgo
-    }));
+    const trackingsWithOverdue = trackings.map((tracking: any) => {
+      // Check if package is older than 5 days and not delivered or cancelled
+      const isOlderThan5Days = new Date(tracking.createdAt) < fiveDaysAgo;
+      const isNotDeliveredOrCancelled = 
+        !tracking.status.toLowerCase().includes('zugestellt') && 
+        !tracking.status.toLowerCase().includes('storniert') &&
+        !tracking.status.toLowerCase().includes('cancelled');
+      
+      return {
+        ...tracking,
+        isOverdue: isOlderThan5Days && isNotDeliveredOrCancelled
+      };
+    });
 
     res.json({ success: true, data: trackingsWithOverdue });
   } catch (error: any) {

@@ -276,9 +276,27 @@ router.get('/list', authenticateToken, async (req, res) => {
       }
     });
 
+    // Calculate isOverdue based on creation date and status
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+    const shipmentsWithOverdue = shipments.map((shipment: any) => {
+      // Check if package is older than 5 days and not delivered or cancelled
+      const isOlderThan5Days = new Date(shipment.createdAt) < fiveDaysAgo;
+      const isNotDeliveredOrCancelled = 
+        !shipment.status.toLowerCase().includes('zugestellt') && 
+        !shipment.status.toLowerCase().includes('storniert') &&
+        !shipment.status.toLowerCase().includes('cancelled');
+      
+      return {
+        ...shipment,
+        isOverdue: isOlderThan5Days && isNotDeliveredOrCancelled
+      };
+    });
+
     res.json({
       success: true,
-      data: shipments
+      data: shipmentsWithOverdue
     });
 
   } catch (error: any) {
@@ -408,6 +426,10 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
 
     const trackingResult = await glsService.trackPackage(trackingNumber, progressCallback);
 
+    // Calculate isOverdue based on creation date and status for both update and create
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
     // Save updated tracking info
     const updatedShipment = await prisma.trackingInfo.upsert({
       where: { trackingNumber },
@@ -415,8 +437,7 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
         status: trackingResult.status,
         location: trackingResult.location,
         lastUpdate: trackingResult.lastUpdate,
-        isOverdue: trackingResult.lastUpdate ? 
-          (Date.now() - trackingResult.lastUpdate.getTime()) > (7 * 24 * 60 * 60 * 1000) : false,
+        isOverdue: false, // Will be calculated after retrieval
         updatedAt: new Date()
       },
       create: {
@@ -425,20 +446,31 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
         status: trackingResult.status,
         location: trackingResult.location,
         lastUpdate: trackingResult.lastUpdate,
-        isOverdue: trackingResult.lastUpdate ? 
-          (Date.now() - trackingResult.lastUpdate.getTime()) > (7 * 24 * 60 * 60 * 1000) : false
+        isOverdue: false // Will be calculated after retrieval
       },
       include: {
         trackingEvents: true
       }
     });
 
+    // Calculate correct isOverdue based on creation date and status
+    const isOlderThan5Days = new Date(updatedShipment.createdAt) < fiveDaysAgo;
+    const isNotDeliveredOrCancelled = 
+      !updatedShipment.status.toLowerCase().includes('zugestellt') && 
+      !updatedShipment.status.toLowerCase().includes('storniert') &&
+      !updatedShipment.status.toLowerCase().includes('cancelled');
+    
+    const shipmentWithCorrectOverdue = {
+      ...updatedShipment,
+      isOverdue: isOlderThan5Days && isNotDeliveredOrCancelled
+    };
+
     // Save tracking events
     for (const event of trackingResult.events) {
       await prisma.trackingEvent.upsert({
         where: {
           trackingId_date_time: {
-            trackingId: updatedShipment.id,
+            trackingId: shipmentWithCorrectOverdue.id,
             date: event.date,
             time: event.time
           }
@@ -448,7 +480,7 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
           location: event.location
         },
         create: {
-          trackingId: updatedShipment.id,
+          trackingId: shipmentWithCorrectOverdue.id,
           date: event.date,
           time: event.time,
           description: event.description,
@@ -463,7 +495,7 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
     res.json({
       success: true,
       message: 'Sendung erfolgreich aktualisiert',
-      data: updatedShipment
+      data: shipmentWithCorrectOverdue
     });
 
   } catch (error: any) {
