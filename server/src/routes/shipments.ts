@@ -131,6 +131,15 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
     // Cleanup
     await glsService.quit();
 
+    // Update lastGlsSync timestamp
+    await prisma.appConfig.update({
+      where: { id: config.id },
+      data: { 
+        lastGlsSync: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
     progressCallback('complete', `${shipments.length} Sendungen erfolgreich geladen und gespeichert`, 100);
 
     res.json({ 
@@ -138,7 +147,8 @@ router.post('/load-from-gls', authenticateToken, async (req: any, res) => {
       message: `${shipments.length} Sendungen erfolgreich geladen`,
       data: {
         count: shipments.length,
-        shipments: shipments
+        shipments: shipments,
+        lastSync: new Date()
       }
     });
 
@@ -408,6 +418,27 @@ router.post('/:trackingNumber/update', authenticateToken, async (req: any, res) 
     res.status(500).json({ 
       success: false, 
       message: `Aktualisierung fehlgeschlagen: ${error.message}` 
+    });
+  }
+});
+
+// Get last sync information
+router.get('/last-sync', authenticateToken, async (req, res) => {
+  try {
+    const config = await prisma.appConfig.findFirst();
+    
+    res.json({
+      success: true,
+      data: {
+        lastSync: config?.lastGlsSync || null
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Get last sync error:', error);
+    res.status(500).json({
+      success: false,
+      message: `Fehler beim Abrufen der Sync-Information: ${error.message}`
     });
   }
 });

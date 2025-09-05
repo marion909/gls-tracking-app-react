@@ -66,6 +66,7 @@ const Dashboard: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [lastGlsSync, setLastGlsSync] = useState<Date | null>(null);
   
   // Filter states
   const [hideDelivered, setHideDelivered] = useState(() => {
@@ -78,6 +79,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadTrackings();
+    loadLastSync();
     setupSocket();
 
     return () => {
@@ -143,6 +145,10 @@ const Dashboard: React.FC = () => {
       setSuccess(data.message);
       setMasterPassword('');
       
+      // Update last sync information and reload data
+      await loadLastSync();
+      await loadTrackings();
+      
     } catch (err: any) {
       setError(err.message || 'Fehler beim Laden der Sendungen');
     } finally {
@@ -175,6 +181,47 @@ const Dashboard: React.FC = () => {
       setError('Verbindungsfehler');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLastSync = async () => {
+    try {
+      const response = await fetch('/api/shipments/last-sync', {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.data.lastSync) {
+        setLastGlsSync(new Date(data.data.lastSync));
+      }
+    } catch (err) {
+      console.error('Fehler beim Laden der letzten Sync-Information:', err);
+    }
+  };
+
+  const formatLastSync = (date: Date | null): string => {
+    if (!date) return 'Noch nie geladen';
+    
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffHours < 1) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `vor ${diffMinutes} Minute${diffMinutes !== 1 ? 'n' : ''}`;
+    } else if (diffHours < 24) {
+      return `vor ${diffHours} Stunde${diffHours !== 1 ? 'n' : ''}`;
+    } else if (diffDays < 7) {
+      return `vor ${diffDays} Tag${diffDays !== 1 ? 'en' : ''}`;
+    } else {
+      return date.toLocaleDateString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
   };
 
@@ -242,7 +289,7 @@ const Dashboard: React.FC = () => {
         <Typography variant="h4" component="h1">
           GLS Sendungsverfolgung
         </Typography>
-        <Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           <Button
             variant="contained"
             startIcon={<LoadIcon />}
@@ -251,6 +298,9 @@ const Dashboard: React.FC = () => {
           >
             Vom GLS Portal laden
           </Button>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            Zuletzt geladen: {formatLastSync(lastGlsSync)}
+          </Typography>
         </Box>
       </Box>
 

@@ -18,6 +18,7 @@ model AppConfig {
   glsPasswordEnc     String?  // AES-256 encrypted
   encryptionSalt     String?  // For AES encryption
   isFirstRun         Boolean  @default(true)
+  lastGlsSync        DateTime? // Letztes Ladedatum vom GLS Portal
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
