@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -20,6 +20,10 @@ const Login: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(true);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Nachricht von automatischem Logout anzeigen
+  const logoutMessage = location.state?.message;
 
   useEffect(() => {
     checkAppStatus();
@@ -84,6 +88,12 @@ const Login: React.FC = () => {
             <Typography variant="h6" color="text.secondary" gutterBottom>
               Master-Passwort Anmeldung
             </Typography>
+
+            {logoutMessage && (
+              <Alert severity="warning" sx={{ width: '100%', mb: 2 }}>
+                {logoutMessage}
+              </Alert>
+            )}
 
             {error && (
               <Alert severity="error" sx={{ width: '100%', mb: 2 }}>

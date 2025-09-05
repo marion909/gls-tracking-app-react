@@ -33,6 +33,7 @@ import {
   GetApp as LoadIcon,
 } from '@mui/icons-material';
 import { io, Socket } from 'socket.io-client';
+import { SessionTimer } from '../components/SessionTimer';
 
 interface TrackingInfo {
   id: number;
@@ -298,9 +299,14 @@ const Dashboard: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          GLS Sendungsverfolgung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            GLS Sendungsverfolgung
+          </Typography>
+          <SessionTimer 
+            timeoutDuration={5 * 60 * 1000} // 5 Minuten
+          />
+        </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           <Button
             variant="contained"

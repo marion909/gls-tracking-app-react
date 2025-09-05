@@ -116,25 +116,34 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Ungültiges Master Password' });
     }
 
-    // Generate JWT
+    // Generate JWT mit 5 Minuten + 30 Sekunden Puffer (für Netzwerk-Latenz)
+    const tokenExpiry = '5m'; // 5 Minuten
+    const cookieExpiry = 5 * 60 * 1000 + 30 * 1000; // 5:30 Minuten in ms
+    
     const token = jwt.sign(
-      { authenticated: true, timestamp: Date.now() },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
+      { 
+        authenticated: true, 
+        timestamp: Date.now(),
+        exp: Math.floor(Date.now() / 1000) + (5 * 60) // 5 Minuten ab jetzt
+      },
+      process.env.JWT_SECRET!
     );
 
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: cookieExpiry
     });
+
+    console.log(`🔑 JWT Token erstellt mit 5 Minuten Gültigkeit für Benutzer`);
 
     res.json({ 
       success: true, 
       message: 'Anmeldung erfolgreich',
       data: {
         token,
+        expiresIn: cookieExpiry,
         hasGlsCredentials: config.glsUsernameEnc ? true : false
       }
     });

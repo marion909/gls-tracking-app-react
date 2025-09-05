@@ -23,14 +23,42 @@ const authenticateToken = (req: any, res: any, next: any) => {
   const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
   
   if (!token) {
-    return res.status(401).json({ success: false, message: 'Nicht authentifiziert' });
+    console.log('🔒 Authentifizierung fehlgeschlagen: Kein Token vorhanden');
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Nicht authentifiziert',
+      code: 'NO_TOKEN'
+    });
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    
+    // Zusätzliche Token-Validierung
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.exp && decoded.exp < now) {
+      console.log('🔒 Token abgelaufen:', { 
+        expired: decoded.exp, 
+        now: now, 
+        diff: now - decoded.exp 
+      });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Token abgelaufen',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+    
+    console.log('✅ Token gültig für Request:', req.originalUrl);
+    req.user = decoded;
     next();
-  } catch (error) {
-    return res.status(401).json({ success: false, message: 'Ungültiger Token' });
+  } catch (error: any) {
+    console.log('🔒 Token Validierung fehlgeschlagen:', error.message);
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Ungültiger Token',
+      code: 'INVALID_TOKEN'
+    });
   }
 };
 
